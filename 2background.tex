@@ -1,0 +1,94 @@
+\chapter{Background}\label{background}
+Before going over the specifics of the code changes made as part of this research project, it is useful to review some background material on Vehicle, its DSL, and the general approach to property-driven training using differentiable logics.
+
+Once these concepts have been introduced, this chapter will survey related work in the areas of formal verification of neural networks, property-driven machine learning, and existing tools that aim to bridge the gap between specification, training, and verification.
+
+\section{The Vehicle Project}
+
+The Vehicle project \citep{daggitt2025vehicle} is a domain-specific language (DSL) and toolchain for specifying and verifying properties of neural and neuro-symbolic programs. Vehicle allows users to write formal specifications in a high-level, solver-independent language, which can then be compiled to multiple back-ends, including SMT solvers, interactive theorem provers, and specialized neural network verifiers.
+
+Vehicle's core idea is to provide a common verification condition language that abstracts away the details of specific verification tools. This allows users to write properties once and then target different back-ends depending on their needs. Vehicle also includes type-safe compilation paths to ensure that the generated verification conditions are well-formed and compatible with the chosen back-end.
+
+\section{Vehicle's Domain-Specific Language}
+
+Vehicle's DSL is designed to express a wide range of properties relevant to neural and neuro-symbolic programs. The language includes constructs for defining variables, functions, and logical properties, as well as specialized constructs for dealing with neural network components. Vehicle supports first-order logic with quantifiers, allowing users to express properties that involve universal or existential quantification over inputs or internal states. Vehicle specifications are typically written in a structured format, with declarations for variables and functions, followed by property declarations that specify the desired behaviors or constraints.
+
+Specifically, references to external resources such as datasets or neural network models can be made within Vehicle programs via decorators. This allows properties to be expressed in terms of real-world data and model behaviors, making the specifications more relevant and applicable to practical scenarios and reusable with different models and specification paramaters.
+
+For example, a simple specification might be the standard robustness property for image classifiers, stating that small perturbations to an input image should not change the predicted class. The Vehicle repository already has an example specification `mnist-robustness.vcl'. Below, we break down this example into its key components to illustrate the structure and features of Vehicle's DSL.
+
+\begin{samepage}
+\paragraph{Type declarations and network interface.}
+We begin by declaring the tensor shapes for images and labels, followed by the neural network we plan to reason about. Vehicle treats neural networks as black boxes annotated with \verb|@network|, so the specification only needs their type signatures. Vehicle supports networks saved as ONNX files, but the specification itself remains agnostic to the underlying implementation. However, the downstream training and verification back-ends have individual constraints on which architectures are supported.
+
+\begin{lstlisting}[language=Vehicle,caption={Types and network interface used by the MNIST property},label={lst:mnist-types}]
+type Image = Tensor Real [28, 28]
+type Label = Index 10
+
+@network
+classifier : Image -> Tensor Real [10]
+\end{lstlisting}
+
+\end{samepage}
+
+\begin{samepage}
+\paragraph{Characterising admissible perturbations.}
+Next we write helper predicates that say which tensors are valid images and which perturbations are allowed (bounded by \verb|epsilon|). The \verb|advises| helper captures the semantics of the classifier's prediction, and \verb|robustAround| lifts these ingredients into the familiar “if every bounded perturbation is still valid, then the classifier keeps the label” statement.
+
+\begin{lstlisting}[language=Vehicle,caption={Reusable predicates describing validity and robustness},label={lst:mnist-helpers}]
+validImage : Image -> Bool
+validImage x = forall i j . 0 <= x ! i ! j <= 1
+
+@parameter
+epsilon : Real
+
+boundedByEpsilon : Image -> Bool
+boundedByEpsilon x = forall i j . -epsilon <= x ! i ! j <= epsilon
+
+advises : Image -> Label -> Bool
+advises x y = forall j . j != y => classifier x ! y > classifier x ! j
+
+robustAround : Image -> Label -> Bool
+robustAround image label = forall perturbation .
+  let perturbed = image - perturbation in
+  boundedByEpsilon perturbation and validImage perturbed =>
+    advises perturbed label
+\end{lstlisting}
+
+\end{samepage}
+
+\begin{samepage}
+\paragraph{Quantifying over the dataset.}
+Finally we quantify the property over the training set. Vehicle’s \verb|@parameter(infer=True)| and \verb|@dataset| decorators let the specification refer to data supplied at compile time. The \verb|@property| block below states that, for every training index \verb|i|, the classifier is robust around that sample.
+
+\begin{lstlisting}[language=Vehicle,caption={Dataset-aware property used for training and verification},label={lst:mnist-property}]
+@parameter(infer=True)
+n : Nat
+
+@dataset
+trainingImages : Vector Image n
+
+@dataset
+trainingLabels : Vector Label n
+
+@property
+mnistRobust : Vector Bool n
+mnistRobust = foreach i .
+  robustAround (trainingImages ! i) (trainingLabels ! i)
+\end{lstlisting}
+
+\end{samepage}
+
+This specification can then be compiled to different back-ends for verification, or interpreted as differentiable loss functions for property-driven training, as described in the next section.
+
+\section{Differentiable Logics}
+
+Differentiable logics provide a way to integrate logical specifications directly into the training of machine learning models. The key idea is to translate logical properties into differentiable loss functions that can be optimized alongside traditional data-driven losses. This allows models to be trained not only to fit the data but also to satisfy formal specifications.
+
+This is done by mapping logical constructs to differentiable operations. For example, conjunctions can be represented using smooth approximations of the minimum function, disjunctions using maximum functions, and quantifiers can be approximated using sampling techniques or soft aggregation methods. By doing so, the resulting loss functions remain differentiable and can be optimized using standard gradient-based methods.
+
+Recent work by Flinkow et al. \citep{flinkow2025property} proposes a general framework for property-driven training that compiles logical specifications into differentiable objectives. Their approach allows for arbitrary first-order properties to be expressed as loss terms, which can then be combined with traditional losses to guide the training process. This framework also includes mechanisms for approximating worst-case violations of properties within specified regions of interest, enabling robust training against adversarial perturbations.
+
+\section{Related Work}
+
+Will describe related work on Neuro-Symbolic training.

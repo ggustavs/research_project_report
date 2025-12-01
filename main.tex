@@ -1,0 +1,391 @@
+\documentclass[12pt, % Main document font size
+final,
+a4paper, % Paper type
+twoside, % Twe page layout (with page indentation)
+BCOR5mm, % Binding correction
+]{report}
+%alternative: \documentclass[10pt, a4paper, oneside, headinclude, footinclude,] {book}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Some credits:
+% The template was developed, expanded, and updated by 
+% - Stefan Heinrich/Uni Paderborn/Uni Hamburg/Toko Uni/IT Uni since 2008,
+% - with additional input by Holger Karl, Sven Magg, Barbara Plank
+% Feedback and suggestions for changes are always welcome.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Meta information:
+\newcommand{\trtitle}{Updating the Vehicle-lang Python bindings to support training with constraints}
+\newcommand{\trtype}{Research Project} %{Bachelor thesis} 
+\newcommand{\trcourseofstudies}{Computer Science} %{Computer Science} %{Software Development} 
+\newcommand{\trauthors}{Gusts Gustavs Grīnbergs}
+\newcommand{\trauthorsdegree}{\ BSc}
+\newcommand{\tremail}{gugr@itu.dk}
+\newcommand{\trsupervisor}{\href{mailto:brun@itu.dk}{Assoc. Prof. Alessandro Bruni}}
+\newcommand{\trdate}{\today}
+\newcommand{\trkeywords}{Differentiable Logics, Vehicle-lang, Python bindings, Formal Methods}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Languages:
+
+% If the thesis is written in English:
+\usepackage[english]{babel}                         
+\selectlanguage{english}
+
+% Danish currently not supported
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Bind packages:
+\usepackage{acronym}                    % Acronyms
+\usepackage{algorithmic}                % Algorithms and Pseudocode
+\usepackage{algorithm}                  % Algorithms and Pseudocode
+\usepackage{amsfonts}                   % AMS Math Packet (Fonts)
+\usepackage{amsmath}                    % AMS Math Packet
+\usepackage{amssymb}                    % Additional mathematical symbols
+\usepackage{amsthm}
+\usepackage{booktabs}                   % Nicer tables with \toprule, \midrule
+%\usepackage[font=small,labelfont=bf]{caption} % Numbered captions for figures
+\usepackage{color}                      % Enables defining of colours
+    \definecolor{Code}{rgb}{0,0,0}
+    \definecolor{Decorators}{rgb}{0.5,0.5,0.5}
+    \definecolor{Links}{rgb}{0, 0, 0.5}
+    \definecolor{Webcites}{rgb}{0,0.5,0}
+    \definecolor{Weblinks}{rgb}{0.734375, 0, 0.125}
+    \definecolor{Numbers}{rgb}{0.63,0,0}
+    \definecolor{MatchingBrackets}{rgb}{0.25,0.5,0.5}
+    \definecolor{Keywords}{rgb}{0,0,1}
+    \definecolor{self}{rgb}{0,0,0}
+    \definecolor{Strings}{rgb}{0,0.63,0}
+    \definecolor{Comments}{rgb}{0,0.63,1}
+    \definecolor{Backquotes}{rgb}{0,0,0}
+    \definecolor{Classname}{rgb}{0,0,0}
+    \definecolor{FunctionName}{rgb}{0,0,0}
+    \definecolor{Operators}{rgb}{0,0,0}
+    \definecolor{Background}{rgb}{0.98,0.98,0.98}
+    \usepackage{csvsimple,longtable}
+\usepackage{enumitem}                   % Required for manipulating the whitespace between and within lists
+\usepackage{eurosym}
+\usepackage{setspace}                  % Provides \setstretch used in listings style
+\usepackage{fancybox}                   % Put equations in a frame
+\usepackage{fancyhdr}                   % Packet for nicer headers
+%\usepackage{fancyheadings}             % Nicer numbering of headlines
+\usepackage[body={5.8in,9in}]{geometry} % Type area (size, margins...)
+
+%\geometry{a4paper,outer=3.35cm}        % !!!Release version (Normal margins)
+%\geometry{a4paper,outer=2.5cm}         % !!!Print version (Additional margin on the left for the binding)
+%\geometry{a4paper}                     % !!!Proofread version (Additional margin on the right for corrections)
+\geometry{a4paper,outer=3.134cm}        % !!!Draft version (Same margins on left and right)
+%\geometry{paperheight=10.0in,paperwidth=6.4in,top=0.51in,left=0.3in}  % !!!Developer version (Minimal margins)
+
+\usepackage{graphicx}                   % Inclusion of graphics
+%\usepackage{latexsym}                  % Special symbols
+\usepackage{longtable}                  % Allow tables over several parges
+\usepackage{listings}                   % Nicer source code listings
+\usepackage{multicol}                   % Content of a table over several columns
+\usepackage{multirow}                   % Content of a table over several rows
+\usepackage{natbib}
+\usepackage{rotating}                   % Alows to rotate text and objects
+%\usepackage{siunitx}					% Nicer display of units and number according to SI standards
+%\sisetup{tight-spacing=true}  
+\usepackage[hang]{subfigure}            % Allows to use multiple (partial) figures in a fig
+%HINT: subfigure may be depricated already - maybe try subfig instead 
+%\usepackage[font=footnotesize,labelfont=rm]{subfig}    % Pictures in a floating environment
+\usepackage{tabularx}                   % Tables with fixed width but variable rows
+\usepackage{url,xspace,boxedminipage}   % Accurate display of URLs
+\usepackage{varioref}                   % More descriptive referencing
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Some custom style definitions
+\lstdefinestyle{mystyle}{
+numbers=left,
+numberstyle=\footnotesize,
+numbersep=1em,
+xleftmargin=1em,
+linewidth=0.95\linewidth,
+framextopmargin=10em,
+framexbottommargin=2em,
+showspaces=false,
+showtabs=false,
+showstringspaces=false,
+frame=l,
+tabsize=4,
+% Basic
+basicstyle=\ttfamily\small\setstretch{1},
+backgroundcolor=\color{Background},
+language=Python,
+columns=fullflexible,
+breaklines=true,
+breakatwhitespace=true,
+postbreak=\mbox{\tiny$\hookrightarrow$\ },
+% Comments
+commentstyle=\color{Comments}\slshape,
+% Strings
+stringstyle=\color{Strings},
+morecomment=[s][\color{Strings}]{"""}{"""},
+morecomment=[s][\color{Strings}]{'''}{'''},
+% keywords
+morekeywords={import,from,class,def,for,while,if,is,in,elif,else,not,and,or,print,break,continue,return,True,False,None,access,as,,del,except,exec,finally,global,import,lambda,pass,print,raise,try,assert},
+keywordstyle={\color{Keywords}\bfseries},
+% additional keywords
+morekeywords={[2]@invariant},
+keywordstyle={[2]\color{Decorators}\slshape},
+emph={self},
+emphstyle={\color{self}\slshape},
+captionpos=b, 
+}
+ 
+\lstset{style=mystyle}
+
+\lstdefinelanguage{Vehicle}{%
+    alsodigit={@},
+    alsoletter={@},
+    sensitive=true,
+    morekeywords={type,Tensor,Vector,List,Real,Int,Nat,Rat,Bool,Index,Image,Label,let,in,forall,exists,foreach,and,or,not,@network,@dataset,@parameter,@property,@postulate,Type,Unit},
+    morecomment=[l]{--},
+    morecomment=[s]{\{-}{-\}},
+    morestring=[b]",%
+    morestring=[b]'%
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PDF Information und Definitions:
+\author{\trauthors}
+
+\ifx\pdftexversion\undefined
+\usepackage{hyperref}
+\else
+\usepackage[colorlinks=true,           % link is colores (true) or has colored frame (false)
+            linkcolor=Links,           % case colorlinks=true: define color.
+            urlcolor=Weblinks,
+            citecolor=Webcites,
+            bookmarks,                  % Place bookmarks erstellen
+            bookmarksopen=true,         % Bookmarks will be shown at start (true/false)
+            pdfpagemode=UseOutlines,    
+            bookmarksopenlevel=1,       % Define the depth of shown links
+            bookmarksnumbered,          % Numbers of chapers in Bookmarks
+            pdftitle={\trtitle},
+            pdfsubject={\trtype},
+            pdfkeywords={\trkeywords},
+            pdfauthor={\trauthors},
+            plainpages=false
+            ]{hyperref}
+\fi
+
+\ifx\pdftexversion\undefined
+\else
+\pdfoutput=1                            % Disable PDF-Output
+\pdfimageresolution=1200
+\pdfcompresslevel=2                     % 0 = no compression, 9 = strongest compression
+\fi
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Configurationen:
+
+\hyphenation{whe-ther}                  % Manually use: "\-" in a word: Staats\-ver\-trag
+
+%\lstloadlanguages{C}                   % Set the default language for listings
+\DeclareGraphicsExtensions{.pdf,.svg,.jpg,.png,.eps} % first try pdf, then eps, png and jpg
+\graphicspath{{./src/}}                 % Path to a folder where all pictures are located
+\pagestyle{fancy}                       % Use nicer header and footer
+
+% Redefine the environments for floating objects:
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{4}
+\renewcommand{\topfraction}{0.9}        %Standard: 0.7
+\renewcommand{\bottomfraction}{0.5}     %Standard: 0.3
+\renewcommand{\textfraction}{0.1}       %Standard: 0.2
+\renewcommand{\floatpagefraction}{0.8}  %Standard: 0.5
+
+% Tables with a nicer padding:
+\renewcommand{\arraystretch}{1.2}
+
+% Chapter and Sections will not be written in capitals
+\renewcommand{\chaptermark}[1]{\markboth{\chaptername \ \thechapter.\ #1}{}}
+\renewcommand{\sectionmark}[1]{\markright{\thesection.\ #1}}
+
+% Avoid french spacing (double spacing after a full stop)
+\frenchspacing
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Additional 'theorem' and 'definition' blocks:
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[chapter]
+%\newtheorem{theorem}{Satz}[chapter]    % Wenn in Deutsch geschrieben wird.
+\newtheorem{axiom}{Axiom}[chapter]     
+%\newtheorem{axiom}{Fakt}[chapter]      % Wenn in Deutsch geschrieben wird.
+%Usage:%\begin{axiom}[optional description]%Main part%\end{fakt}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[chapter]
+
+%Additional types of axioms:
+\newtheorem{lemma}[axiom]{Lemma}
+\newtheorem{observation}[axiom]{Observation}
+
+%Additional types of definitions:
+\theoremstyle{remark}
+%\newtheorem{remark}[definition]{Bemerkung} % Wenn in Deutsch geschrieben wird.
+\newtheorem{remark}[definition]{Remark} 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Provides TODOs within the margin:
+\newcommand{\TODO}[1]{\marginpar{\emph{\small{{\bf TODO: } #1}}}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Abbreviations and mathematical symbols
+\newcommand{\modd}{\text{ mod }}
+\newcommand{\RS}{\mathbb{R}}
+\newcommand{\NS}{\mathbb{N}}
+\newcommand{\ZS}{\mathbb{Z}}
+\newcommand{\dnormal}{\mathit{N}}
+\newcommand{\duniform}{\mathit{U}}
+
+\newcommand{\erdos}{Erd\H{o}s}
+\newcommand{\renyi}{-R\'{e}nyi}
+% it is recommented to define complex terms as expression/newcommand and use the expression in the tex instead.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Document:
+
+\begin{document}
+
+\pagenumbering{Roman}                   % Roman pagenumbering for lists and meta pages
+\renewcommand{\headheight}{14.5pt}      % Size of headings
+
+\thispagestyle{empty}
+\fancyhead[LO,RE]{}                     % Define the header style for the meta pages
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Cover sheet
+
+\begin{titlepage}
+    \begin{center}
+        \includegraphics[width=4in]{ITUlogo.jpg}\\
+    \end{center}
+    %\rule{\textwidth}{0.4pt} \newline
+        \vspace{3.0cm}
+        {\linespread{1.5}\selectfont
+            \begin{center}
+                \LARGE \textbf{\trtitle}
+            \end{center}
+        }
+    \vfill
+    \begin{flushleft}
+        \textbf{\trtype}\\
+        Computer Science Department\\
+        IT University of Copenhagen \\ 
+        \vspace{1cm}
+        submitted by \\
+        \textbf{\href{mailto:\tremail}{\trauthors\trauthorsdegree}}\\
+        Course of study: \ \trcourseofstudies \\
+        on \trdate \\
+        \vspace{1cm}
+        Supervisor: \ \trsupervisor
+    \end{flushleft}
+    %\rule{\textwidth}{0.4pt}
+    \newpage 
+\end{titlepage}
+
+    %backsite of cover sheet is empty!
+\thispagestyle{empty}
+\hspace{1cm}
+\newpage
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Abstract:
+\section*{Abstract}\label{sec:abstract}
+%\fancyhead[LE,RO]{\it Abstract}
+%\addcontentsline{toc}{chapter}{\numberline{}Abstract}
+Your English abstract here (mandatory if written in English and recommended otherwise).
+
+The abstract usually is a continuous text with four parts:
+\begin{itemize}
+    \item The overall field (see introduction)
+    \item The open problem
+    \item Your approach to solving the problem
+    \item An crisp overview of your main results. This is a birds-eye view of the answers to the main questions, which are answered in the thesis.
+\end{itemize}
+
+% If the abstract ist not longer than half a page, then the German Zusammenfassung can be places on the same page
+%\cleardoublepage
+\vfill
+\fancyhead[LE,RO]{\it Abstract}
+
+\cleardoublepage
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Lists:
+%\setcounter{tocdepth}{1}               % depth of the table of contents (for BSc and MSc Thesis 1 is recommented)
+\fancyhead[LE,RO]{\it Contents}
+\tableofcontents
+\cleardoublepage
+% List of Figures and List of tables are optional. -> Not needed in most theses.
+\fancyhead[LE,RO]{\it List of Figures}
+\listoffigures
+\cleardoublepage
+\fancyhead[LE,RO]{\it List of Tables}
+\listoftables
+\cleardoublepage
+%\lstlistoflistings
+%\cleardoublepage
+
+\fancyhead[LE]{\it \leftmark}           % Define the header style for the text pages
+\fancyhead[RO]{\it \rightmark}          % Define the header style for the text pages
+\fancyhead[LO,RE]{}                     % Define the header style for the text pages
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% The content will be included here:
+\pagenumbering{arabic}
+
+\input{1introduction.tex}
+\cleardoublepage
+
+\input{2background.tex}
+\cleardoublepage
+
+\input{3approach.tex}
+\cleardoublepage
+
+\input{4evaluation.tex}
+\cleardoublepage
+
+\input{5conclusions.tex}
+\cleardoublepage
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Appendices:
+% these are optional! For most Bachelor-theses and some Master-thesis none of them is needed. 
+% Just comment them if not needed.
+\appendix
+\fancyhead[LO,RE]{}                      % Define the header style for the appendixpages
+
+\fancyhead[LE,RO]{\it Anhang A. Nomenclature}                %Adapt letter!
+  \input{appA.tex}
+\cleardoublepage
+
+\fancyhead[LE,RO]{\it Anhang B. Additional Proofs}            %Adapt letter!
+  \input{appB.tex}
+\cleardoublepage
+
+\fancyhead[LE,RO]{\it Anhang C. Complete Simulation Results}%Adapt letter!
+  \input{appC.tex}
+\cleardoublepage
+
+% ... add as much appendices as you need (one can also add source code, for example)
+
+%\fancyhead[LE]{\it \leftmark}
+%\chapter{}
+\fancyhead[LE,RO]{\it Bibliography}       % A bibliography never have a letter or numbering!
+    \bibliographystyle{plain}             % Style for presenting the literature
+	\phantomsection\addcontentsline{toc}{chapter}{Bibliography}% Add to the TOC
+    \bibliography{thesis}
+\cleardoublepage
+
+%The backcover is always empty
+\newpage
+\thispagestyle{empty}
+\hspace{1cm}
+\newpage
+
+\end{document}
+%EOF
+
