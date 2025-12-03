@@ -7,7 +7,7 @@ Once these concepts have been introduced, this chapter will survey related work 
 
 The Vehicle project \citep{daggitt2025vehicle} is a domain-specific language (DSL) and toolchain for specifying and verifying properties of neural and neuro-symbolic programs. Vehicle allows users to write formal specifications in a high-level, solver-independent language, which can then be compiled to multiple back-ends, including SMT solvers, interactive theorem provers, and specialized neural network verifiers.
 
-Vehicle's core idea is to provide a common verification condition language that abstracts away the details of specific verification tools. This allows users to write properties once and then target different back-ends depending on their needs. Vehicle also includes type-safe compilation paths to ensure that the generated verification conditions are well-formed and compatible with the chosen back-end.
+Vehicle's core idea is to provide a common verification condition language that abstracts away the details of specific verification tools. This allows users to write properties once and then target different back-ends depending on their needs. Vehicle also includes type-safe compilation paths to ensure that the generated verification conditions are well-formed and compatible with the chosen back-end. In the implementation described later, these responsibilities are exposed through lightweight \texttt{vehicle\_lang.compile} utilities in the Python bindings that shell out to the compiler without importing any training-specific dependencies, reserving the heavier loss functionality for a separate module. The compiler can also be invoked directly from the command line using the \texttt{vehicle} CLI tool.
 
 \section{Vehicle's Domain-Specific Language}
 
@@ -79,7 +79,7 @@ mnistRobust = foreach i .
 
 \end{samepage}
 
-This specification can then be compiled to different back-ends for verification, or interpreted as differentiable loss functions for property-driven training, as described in the next section.
+This specification can then be compiled to different back-ends for verification, or interpreted as differentiable loss functions for property-driven training, as described in the next section. The updated Python bindings realise this duality by hosting all differentiable-loss logic inside the \texttt{vehicle\_lang.loss} package, which loads the AST through the new \texttt{loss.\_ast} module and instantiates backend-specific translations only when the TensorFlow or PyTorch optional extras are present.
 
 \section{Differentiable Logics}
 

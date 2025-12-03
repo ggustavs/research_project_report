@@ -18,19 +18,18 @@ The approach of this research project is therefore not to invent a new architect
 
 \section{AST Ingestion from the Vehicle Compiler}
 
-The first step was to bring Python-side AST ingestion back in sync with the Vehicle compiler, addressing the staleness of the JSON AST mirror described above. In collaboration with the core Vehicle developers, I introduced an updated and refactored internal module \texttt{compile.\_ast} to replace the outdated public \texttt{vehicle\_lang.ast} in the compilation pipeline.
+The first step was to bring Python-side AST ingestion back in sync with the Vehicle compiler, addressing the staleness of the JSON AST mirror described above. In collaboration with the core Vehicle developers, I introduced an updated and refactored internal module \texttt{vehicle\_lang.loss.\_ast} to replace the outdated public \texttt{vehicle\_lang.ast} in the compilation pipeline.
 
 \subsection{Internal AST Module}
 
-The \texttt{compile.\_ast} package provides:
-
+The \texttt{vehicle\_lang.loss.\_ast} module provides:
 \begin{itemize}
 	\item A \texttt{load} function that invokes the Vehicle compiler with the appropriate \texttt{--json compile loss} and \texttt{--logic} options, for a given specification file and list of declarations.
 	\item A set of \texttt{\_nodes} dataclasses that mirror the current JSON AST produced by the Vehicle compiler, including constructs for quantifiers and operations the new tensor representation.
 	\item A refactored JSON decoder \texttt{\_decode.py} that uses modern Python type annotations and improved error handling, making it easier to evolve alongside the compiler.
 \end{itemize}
 
-By prefixing a module or script with an underscore, we signal that it is internal and not part of the public API. This gives us freedom to evolve the AST representation as needed without breaking user code as well as improving the usability of the codebase. % TODO: reference to PEP8
+By prefixing a module or script with an underscore, we signal that it is internal and not part of the public API. This gives us freedom to evolve the AST representation as needed without breaking user code as well as improving the usability of the codebase \cite{pep8}.
 
 \section{Abstraction Layer}
 
@@ -38,7 +37,7 @@ The second step was to streamline the abstractions that enable the modularity of
 
 \subsection{Internal Abstract Base Class Package}
 
-On my branch I introduced the new internal module \texttt{compile.\_abc} which refines and consolidates this abstraction into four main components:
+On my branch I introduced the new internal module \texttt{vehicle\_lang.loss.\_abc} which refines and consolidates this abstraction into four main components:
 
 \begin{description}
 	\item[\texttt{\_types.py}] Defines generic type variables for indices, rational numbers, tensors and for the program/declaration/expression types that a translation operates on. This makes the interfaces parametric in the backend, while remaining tied to the structure of the Vehicle AST.
@@ -49,6 +48,19 @@ On my branch I introduced the new internal module \texttt{compile.\_abc} which r
 \end{description}
 
 This modular design makes it easy to add more backends in the future if they can satisfy these interfaces.
+
+\subsection{Separating ITP, Queries, and Loss Logic}
+
+After stabilising the AST and abstraction layers I revisited the overall package organisation. On \texttt{dev}, the public \texttt{vehicle\_lang.compile} module addressed every downstream consumer simultaneously: it invoked the compiler for ITP exports, SMT-style query formats, and the differentiable loss path. Consequently, importing \texttt{vehicle\_lang} indiscriminately pulled in TensorFlow even when a user only produced, for example, VNNLib queries. I therefore separated the responsibilities along their natural boundaries:
+
+\begin{itemize}
+	\item \textbf{Compilation and verification targets} remain under \texttt{vehicle\_lang.compile} (and neighbouring modules) and expose thin wrappers around the CLI (e.g. \texttt{compile\_specification} and \texttt{call\_vehicle}). These modules depend solely on the shared typing layer and session helpers, which keeps them lightweight.
+	\item \textbf{Training-time loss logic} was relocated to a dedicated \texttt{vehicle\_lang.loss} package. This package owns AST decoding, abstract base classes, backend translations, and backend-specific helpers. Because the key modules live under \texttt{\_ast}, \texttt{\_abc}, \texttt{\_tensorflow}, and \texttt{\_pytorch}, importing \texttt{vehicle\_lang} no longer instantiates TensorFlow or PyTorch unless a loss backend is explicitly requested.
+	\item \textbf{Optional dependencies} are guarded via the shared \texttt{require\_optional-\\
+	\_dependency} helper. TensorFlow and PyTorch are imported only inside the modules that require them, and the resulting error message directs the user to the corresponding \texttt{pip install "vehicle\_lang[tensorflow]"} or \texttt{[pytorch]} extra when missing.
+\end{itemize}
+
+This separation makes the relationship between the verification and training pipelines explicit while minimising unnecessary transitive dependencies: command-line workflows retain a minimal footprint, whereas researchers who require the loss module opt into the relevant extras and obtain the full backend stack.
 
 \section{Sampler Design and Implementation}
 
@@ -81,17 +93,19 @@ Each backend provides a more specific abstract class that inherits from \\
 
 If a user wants to wants to use a custom sampling strategy, they can implement their own class conforming to \texttt{ABCSampler} and define a dictionary which maps the name of the variable being searched for to their corresponding sampler instance. This allows for having separate samplers for different quantified variables in the same specification, e.g. one for image perturbations and another for sensor noise.
 
+However, we do allow for ducktyping here: as long as the user-provided sampler has a \texttt{get\_loss} method with the correct signature, it will be accepted at runtime. This design choice was made to lower the barrier for users to provide custom samplers without needing to formally inherit from the abstract base class.
+
 \section{Extending and Aligning the translations}
 
 With the abstractions and sampler design in place, the next step was to extend and align the \texttt{PythonTranslation} class to implement all of the necessary methods of \texttt{ABCTranslation}, and to do the same for both TensorFlow and the new PyTorch backend so that they implement \texttt{ABCBuiltins} and \texttt{ABCSampler} correctly. 
 
 \subsection{Python translation}
 
-The \texttt{PythonTranslation} class defines how Vehicle AST nodes are translated into Python \texttt{ast} nodes. The low-level operations are delegated to the backend-specific builtins and samplers by calling their corresponding methods from a dictionary that is assumed to be available at runtime.
+The \texttt{PythonTranslation} class now resides in \texttt{vehicle\_lang.loss.\_python} and defines how Vehicle AST nodes are translated into Python \texttt{ast} nodes. A helper in \texttt{loss.\_common} instantiates this translation via a backend-specific factory, ensuring that every backend reuses the same traversal and substitutes only its \texttt{builtins} and \texttt{samplers}. Low-level operations are delegated to those backend implementations through the runtime dictionaries.
 
 In the case of the potentially user provided samplers, the availability of the specific sampler instance is checked at runtime by looking up the variable name in a \texttt{samplers} dictionary that is passed to the compiled loss function. If no sampler is defined for this variable, then a \texttt{KeyError} is returned. This is an intentional design choice to ensure that users are aware when they have not provided a sampler for a quantified variable, instead of defaulting to a sampler which may not be appropriate for their use case.
 
-The translation's \texttt{compile} method generates python bytecode which then is executed with a decelaration context that includes the builtins and samplers, adding an entry to the provided dictionary containing the generated callable loss function. The method terminates by returning this updated dictionary containing the result of the execution.
+The translation's \texttt{compile} method generates Python bytecode which is executed with a declaration context that includes the builtins and samplers, thereby adding an entry to the provided dictionary containing the generated callable loss function. The method terminates by returning this updated dictionary containing the result of the execution. As this path is now invoked solely through \texttt{loss.\_common.load\_loss\_specification}, none of this machinery runs when a user relies exclusively on the verification-oriented \texttt{compile} modules.
 
 \subsection{TensorFlow Backend}
 
@@ -103,7 +117,7 @@ The TensorFlow backend was updated to implement the new \texttt{ABCBuiltins} and
 	\texttt{PythonTranslation}, the specific sampler interface and default implementation is defined in \texttt{tensorflow.samplers.py}. 
 \end{itemize}
 
-Most of the needed operations already existed in the original implementation, so the changes were mostly around updating method signatures and adding missing operations to align with the new abstractions.
+Most of the needed operations already existed in the original implementation, so the changes were mostly around updating method signatures and adding missing operations to align with the new abstractions. The module now imports TensorFlow through the shared \texttt{require\_optional\_dependency} helper, so users who never call \texttt{vehicle\_lang.loss.tensorflow.load\_specification} can still install the package without TensorFlow present.
 
 \subsection{PyTorch Backend}
 
@@ -116,20 +130,21 @@ On the \texttt{dev} branch there was no PyTorch. On my branch I implemented a pa
 
 Since the abstractions were designed to be backend-agnostic, this implementation was straightforward, requiring mostly one-to-one mappings of operations from TensorFlow to PyTorch with minor differences in API conventions.
 
+As with TensorFlow, PyTorch is treated as an optional dependency. The backend code is only imported when a caller uses \texttt{vehicle\_lang.loss.pytorch}, and the helper explains which \texttt{pip} extra to install if the module is missing. This keeps the default installation lean while still supporting both ecosystems.
+
 This ensures that the same Vehicle specification can be compiled into PyTorch-based loss functions, enabling property-driven training in PyTorch with no changes to the original specification. This was a key goal of the project, as it broadens the applicability of Vehicle to a wider range of projects. This also serves as a step towards integrating the work of \textit{Flinkow et al}\cite{flinkow2025property} within Vehicle.
 
 \section{High-Level Python API and Package Design}
 
-Finally, I integrated these internal changes into a high-level Python API aimed at end users. The primary entry point for training with constraints is the\\
-\texttt{load\_specification} function:
+Finally, I integrated these internal changes into a high-level Python API aimed at end users. Each backend exposes a dedicated \texttt{load\_specification} helper (e.g. \texttt{vehicle\_lang.loss.tensorflow.load\_specification} or \texttt{vehicle\_lang.loss.pytorch.load\_specification}) that wraps the shared loader in \texttt{loss.\_common}:
 
 \begin{itemize}
-	\item It takes a Vehicle specification file, a choice of \texttt{LossBackend} (TensorFlow or PyTorch), and optionally a dictionary of custom samplers.
+	\item The caller passes a Vehicle specification file, optionally restricts the declaration set, selects a differentiable logic, and can provide custom samplers.
 	\item Internally, it calls \texttt{\_ast.load} to obtain the updated AST, and then uses the appropriate backend-specific translation to populate a user-provided\\
 	\texttt{declaration\_context} mapping.
-	\item The resulting context contains callable loss functions for each named declaration (property) in the Vehicle specification, ready to be plugged into standard training loops.
+	\item Because the backend module is selected explicitly, the optional dependency is loaded only when needed. The resulting context contains callable loss functions for each named declaration (property) in the Vehicle specification, ready to be integrated into standard training loops.
 \end{itemize}
 
 The package exposes only the necessary components for users, while keeping the internal modules such as \texttt{\_ast}, \texttt{\_abc}, and backend implementations private. While a user can still access these internal modules if needed, the high-level API is designed to cover the common use cases without requiring direct interaction with the lower-level details. This also serves to make it easier to understand which parts of the codebase are stable and intended for public use versus those that are more experimental or subject to change. 
 
-This design keeps the internal complexity of AST decoding, abstraction, and sampler semantics hidden from users, while still allowing advanced users to override or extend sampler behaviour when needed. It also makes it more obvious which components are meant to be extended or customised, versus those that are would take more changes, such as adding a new backend.
+This design keeps the internal complexity of AST decoding, abstraction, and sampler semantics hidden from users, while still allowing advanced users to override or extend sampler behaviour when needed. It also reiterates the separation principle introduced earlier: importing \texttt{vehicle\_lang} for CLI compilation remains lightweight, and only those who adopt property-driven training incur the TensorFlow or PyTorch dependencies.
