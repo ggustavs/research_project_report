@@ -1,3 +1,30 @@
 \chapter{Evaluation and Analysis}\label{analysis}
 
-Will go over the evaluation of the implemented system, probably by going over the tests that were written for it, and discussing how they demonstrate that the research question has been answered.
+This chapter evaluates whether the updated Python bindings satisfy the research question, namely that the same Vehicle specification can be exercised consistently for both verification and training. The evidence is drawn from the Pytest suites in \inlinecode{vehicle-python/tests}, which cover AST ingestion, backend translation, and differentiable training across TensorFlow and PyTorch.
+
+\section{AST Synchronisation Results}
+
+The \inlinecode{test\_lossdl2\_load.py} and \inlinecode{test\_golden\_specs.py} suites compile every synthetic specification in \inlinecode{tests/data} as well as the large ``golden'' benchmarks (reachability, monotonicity, wind controller) via \texttt{vehicle --json compile loss}. The resulting JSON programs are decoded through \inlinecode{vehicle\_lang.loss._ast.load} with \inlinecode{DifferentiableLogic.DL2}. All files load successfully except for the two bounds-only quantifier fixtures that the suite intentionally skips because of a known compiler bug.\footnote{\href{https://github.com/vehicle-lang/vehicle/issues/1004}{Vehicle issue~\#1004}}
+Passing these tests demonstrates that the private \inlinecode{\_ast} module mirrors the current compiler, including the constructs introduced for \inlinecode{SearchRatTensor} and quantified search, thereby eliminating the original drift between the compiler and the Python bindings.
+
+\section{Backend Validation}
+
+\subsection{TensorFlow}
+
+The suite in \inlinecode{test\_lossdl2\_exec.py} loads each specification through \inlinecode{vehicle\_lang.loss.tensorflow.load\_specification}, exercises arithmetic primitives, tensor constructors, and network calls, and validates the returned callables either through scalar expectations or through custom validators (e.g. the "bounded" property that injects a dummy sampler). Additional golden tests compile the large specifications to TensorFlow and confirm that user-facing declarations are emitted. Together, these tests demonstrate that the \inlinecode{TensorFlowTranslation}, \inlinecode{TensorFlowBuiltins}, and sampler implementations satisfy the \inlinecode{ABCBuiltins}/\inlinecode{ABCSampler} contracts and expose the expected declaration context without requiring any additional configuration beyond optional sampler dictionaries.
+
+\subsection{PyTorch}
+
+PyTorch coverage is provided by \inlinecode{test\_pytorch\_backend.py} and \inlinecode{test\_pytorch\_integration.py}. The backend tests exercise every tensor primitive (creation, arithmetic, reductions, dimension constructors) and verify CUDA compatibility when available. The integration tests compile real specifications via the Vehicle CLI, feed the JSON program to \inlinecode{PyTorchTranslation}, and compare the resulting symbol tables against those produced by the TensorFlow translation, ensuring that both backends expose identical user declarations. Golden-spec compilation further confirms that production-scale specifications execute in the PyTorch backend. Passing these tests demonstrates feature parity between the two backends and shows that the backend-agnostic abstractions introduced in Chapter~\ref{approach} operate as intended.
+
+\section{Training Integration Experiments}
+
+The training-focused evidence comes from \inlinecode{test\_training.py}, which instantiates both TensorFlow and PyTorch models and optimisers. Two ``constraint-only'' tests initialise networks that violate the \inlinecode{output\_bounded} property generated from \inlinecode{test\_trainable.vcl}. After 50 optimisation steps using only the compiled loss, both frameworks reduce the loss value and lower the maximum output, demonstrating that the generated constraint is differentiable and can steer the model without any task loss. The combined-loss tests create a simple regression task ($y = 2x$) and optimise a weighted sum of task loss and constraint loss. They verify that initial losses are finite, gradients are finite (a critical property given the use of FGSM-style samplers), and that a single optimisation step reduces the combined objective. A multi-step PyTorch test further shows monotonic improvement over 20 iterations. Collectively, these experiments confirm that the generated losses integrate seamlessly with automatic differentiation and that sampler-provided perturbations do not break gradient flow.
+
+\section{Optional Dependencies and Disabled Scenarios}
+
+Every test module uses \inlinecode{pytest.importorskip} to enforce the optional-dependency policy: verification and AST tests run without TensorFlow or PyTorch installed, while backend and training suites activate only when the corresponding extras are available. This behaviour demonstrates that the separation described in Chapter~\ref{approach} is effective in practice. Two longer-running end-to-end demonstrations (bounded TensorFlow training and MNIST robustness) remain guarded by \inlinecode{if False} blocks to avoid prohibitive runtime in continuous integration; the necessary code paths are nevertheless covered indirectly through the regression and training suites, and they provide a blueprint for future extended experiments.
+
+\section{Interpretation and Remaining Risks}
+
+The evaluation shows that all critical invariants of the research question hold: (i) AST ingestion remains aligned with the compiler, (ii) both backends implement the loss logic with feature parity and optional dependency isolation, and (iii) the resulting loss functions are differentiable and effective inside standard training loops. The remaining risks are limited to the bounds-only quantifier fixtures that stay intentionally disabled until the compiler bug tracked in Vehicle issue~\#1004 is fixed, and the disabled full end-to-end demonstrations. Addressing those will require more work on the Vehicle compiler side as well as longer-running experiments.

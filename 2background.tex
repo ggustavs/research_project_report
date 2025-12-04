@@ -7,19 +7,19 @@ Once these concepts have been introduced, this chapter will survey related work 
 
 The Vehicle project \citep{daggitt2025vehicle} is a domain-specific language (DSL) and toolchain for specifying and verifying properties of neural and neuro-symbolic programs. Vehicle allows users to write formal specifications in a high-level, solver-independent language, which can then be compiled to multiple back-ends, including SMT solvers, interactive theorem provers, and specialized neural network verifiers.
 
-Vehicle's core idea is to provide a common verification condition language that abstracts away the details of specific verification tools. This allows users to write properties once and then target different back-ends depending on their needs. Vehicle also includes type-safe compilation paths to ensure that the generated verification conditions are well-formed and compatible with the chosen back-end. In the implementation described later, these responsibilities are exposed through lightweight \texttt{vehicle\_lang.compile} utilities in the Python bindings that shell out to the compiler without importing any training-specific dependencies, reserving the heavier loss functionality for a separate module. The compiler can also be invoked directly from the command line using the \texttt{vehicle} CLI tool.
+Vehicle's core idea is to provide a common verification condition language that abstracts away the details of specific verification tools. This allows users to write properties once and then target different back-ends depending on their needs. Vehicle also includes type-safe compilation paths to ensure that the generated verification conditions are well-formed and compatible with the chosen back-end. In the implementation described later, these responsibilities are exposed through lightweight \inlinecode{vehicle\_lang.compile} utilities in the Python bindings that shell out to the compiler without importing any training-specific dependencies, reserving the heavier loss functionality for a separate module. The compiler can also be invoked directly from the command line using the \inlinecode{vehicle} CLI tool.
 
 \section{Vehicle's Domain-Specific Language}
 
 Vehicle's DSL is designed to express a wide range of properties relevant to neural and neuro-symbolic programs. The language includes constructs for defining variables, functions, and logical properties, as well as specialized constructs for dealing with neural network components. Vehicle supports first-order logic with quantifiers, allowing users to express properties that involve universal or existential quantification over inputs or internal states. Vehicle specifications are typically written in a structured format, with declarations for variables and functions, followed by property declarations that specify the desired behaviors or constraints.
 
-Specifically, references to external resources such as datasets or neural network models can be made within Vehicle programs via decorators. This allows properties to be expressed in terms of real-world data and model behaviors, making the specifications more relevant and applicable to practical scenarios and reusable with different models and specification paramaters.
+Specifically, references to external resources such as datasets or neural network models can be made within Vehicle programs via decorators. This allows properties to be expressed in terms of real-world data and model behaviors, making the specifications more relevant and applicable to practical scenarios and reusable with different models and specification parameters.
 
-For example, a simple specification might be the standard robustness property for image classifiers, stating that small perturbations to an input image should not change the predicted class. The Vehicle repository already has an example specification `mnist-robustness.vcl'. Below, we break down this example into its key components to illustrate the structure and features of Vehicle's DSL.
+For example, a simple specification might be the standard robustness property for image classifiers, stating that small perturbations to an input image should not change the predicted class. The Vehicle repository already includes such an example, \inlinecode{examples/mnist-robustness.vcl}, which the remainder of this section dissects to illustrate the structure and features of Vehicle's DSL.
 
 \begin{samepage}
 \paragraph{Type declarations and network interface.}
-We begin by declaring the tensor shapes for images and labels, followed by the neural network we plan to reason about. Vehicle treats neural networks as black boxes annotated with \verb|@network|, so the specification only needs their type signatures. Vehicle supports networks saved as ONNX files, but the specification itself remains agnostic to the underlying implementation. However, the downstream training and verification back-ends have individual constraints on which architectures are supported.
+We begin by declaring the tensor shapes for images and labels, followed by the neural network we plan to reason about. Vehicle treats neural networks as black boxes annotated with \verb|@network|, so the specification only needs their type signatures. Vehicle supports networks saved as ONNX files, but the specification itself remains agnostic to the underlying implementation. However, the downstream training and verification back-ends have individual constraints on which architectures are supported \cite{wu2024marabou20versatileformal}.
 
 \begin{lstlisting}[language=Vehicle,caption={Types and network interface used by the MNIST property},label={lst:mnist-types}]
 type Image = Tensor Real [28, 28]
@@ -79,16 +79,49 @@ mnistRobust = foreach i .
 
 \end{samepage}
 
-This specification can then be compiled to different back-ends for verification, or interpreted as differentiable loss functions for property-driven training, as described in the next section. The updated Python bindings realise this duality by hosting all differentiable-loss logic inside the \texttt{vehicle\_lang.loss} package, which loads the AST through the new \texttt{loss.\_ast} module and instantiates backend-specific translations only when the TensorFlow or PyTorch optional extras are present.
+This specification can then be compiled to different back-ends for verification, or interpreted as differentiable loss functions for property-driven training, as described in the next section. The updated Python bindings realise this duality by hosting all differentiable-loss logic inside the \inlinecode{vehicle\_lang.loss} package, which loads the AST through the new \inlinecode{loss.\_ast} module and instantiates backend-specific translations only when the TensorFlow or PyTorch optional extras are present.
 
 \section{Differentiable Logics}
 
-Differentiable logics provide a way to integrate logical specifications directly into the training of machine learning models. The key idea is to translate logical properties into differentiable loss functions that can be optimized alongside traditional data-driven losses. This allows models to be trained not only to fit the data but also to satisfy formal specifications.
+Differentiable logics (DLs) bridge the gap between symbolic reasoning and continuous optimization, providing a mechanism to integrate logical specifications directly into the training of machine learning models \cite{van2022analyzing}. The core principle is the translation of discrete logical properties---which are typically non-differentiable---into smooth, differentiable loss functions. This enables the use of standard gradient-based optimization algorithms (such as stochastic gradient descent) to train models that not only fit empirical data but also respect formal correctness properties.
 
-This is done by mapping logical constructs to differentiable operations. For example, conjunctions can be represented using smooth approximations of the minimum function, disjunctions using maximum functions, and quantifiers can be approximated using sampling techniques or soft aggregation methods. By doing so, the resulting loss functions remain differentiable and can be optimized using standard gradient-based methods.
+\subsection{From Logic to Loss}
+The translation process maps Boolean logic semantics onto a continuous domain (typically $[0, 1]$ or $\mathbb{R}$), effectively ``fuzzifying'' the logic. This is achieved through the use of \textit{t-norms} (triangular norms) and their associated conorms, which provide differentiable approximations for logical connectives:
 
-Recent work by Flinkow et al. \citep{flinkow2025property} proposes a general framework for property-driven training that compiles logical specifications into differentiable objectives. Their approach allows for arbitrary first-order properties to be expressed as loss terms, which can then be combined with traditional losses to guide the training process. This framework also includes mechanisms for approximating worst-case violations of properties within specified regions of interest, enabling robust training against adversarial perturbations.
+\begin{itemize}
+    \item \textbf{Conjunction ($\land$):} Often approximated using the minimum function (Gödel t-norm), product (Product t-norm), or the Łukasiewicz t-norm ($\max(0, x + y - 1)$).
+    \item \textbf{Disjunction ($\lor$):} Approximated via the maximum function or probabilistic sums.
+    \item \textbf{Implication ($\to$):} Derived from the chosen t-norm residuals, allowing properties like ``if input is $A$, then output must be $B$'' to be encoded as a penalty term.
+\end{itemize}
+
+While propositional connectives are straightforward to map, first-order quantifiers pose a significant challenge. Universally quantified properties (e.g., ``for all inputs $x$ in region $R$, condition $P(x)$ holds'') theoretically require infinite checks. Traditional DL approaches approximate these quantifiers using Monte Carlo sampling, calculating the average or maximum loss over a batch of random points. However, naive sampling often fails to detect sparse counter-examples, leading to models that satisfy properties on average but fail in worst-case scenarios \cite{fischer2019dl2}.
+
+\subsection{Property-Driven Training Framework}
+To address the limitations of sampling-based DLs, recent work by Flinkow et al. \cite{flinkow2025property} proposes a general framework for \textit{property-driven training}. This approach compiles high-level logical specifications into differentiable objectives that explicitly target the model's worst-case behaviors.
+
+Crucially, this framework introduces a mechanism for approximating the worst-case violation of properties within specified regions of interest, often defined as hyper-rectangles in the input space. Rather than relying solely on random sampling, the training process integrates an adversarial search (or ``attack'') step that actively seeks inputs maximizing the logical loss. This results in a robust training objective:
+
+\begin{equation}
+    \mathcal{L}_{\text{total}} = \mathcal{L}_{\text{data}} + \lambda \cdot \max_{x \in S} \mathcal{L}_{\text{logic}}(x)
+\end{equation}
+
+\noindent where $S$ represents the region defined by the specification. By optimizing against these ``most violating'' inputs, the model is forced to learn a decision boundary that is robust to perturbations and consistent with the formal specification, effectively combining the benefits of adversarial training with the expressivity of first-order logic.
+
+The implementation of this framework (integrated into the Vehicle ecosystem) allows users to express arbitrary first-order properties which are then automatically compiled into these hybrid loss functions, utilizing optimizers capable of handling the inner maximization problem efficiently.
 
 \section{Related Work}
 
-Will describe related work on Neuro-Symbolic training.
+The integration of symbolic reasoning into machine learning pipelines has emerged as a critical area of research, driven largely by the need for safety and reliability of neural networks. This section outlines the progression from adversarial robustness and formal verification to the recent developments in differentiable logics and neuro-symbolic frameworks.
+
+\subsection{Adversarial Robustness and Explanability}
+The susceptibility of deep neural networks to adversarial perturbations was famously highlighted by Szegedy et al. \cite{szegedy2014intriguing}, who demonstrated that imperceptible changes to input data could lead to high-confidence misclassifications. Goodfellow et al. \cite{goodfellow2015explaining} further formalized this via the generation of adversarial examples, arguing that the linearity of high-dimensional models was a primary cause of this brittleness. These foundational works established the necessity for models that do not merely fit training distributions but satisfy formal robustness properties.
+
+\subsection{Formal Verification of Neural Networks}
+To address these reliability concerns, the formal methods community developed techniques to prove properties of neural networks post-training. Early breakthroughs include \textit{Reluplex} \cite{reluplex2017efficient}, which extended the Simplex algorithm to handle non-convex ReLU activation functions, enabling the verification of safety properties in collision avoidance systems.
+
+More recently, Casadio et al. \cite{casadio2022neural} proposed a principled methodology for evaluating robustness as a formal verification property. They highlighted the distinction between empirical robustness (resistance to known attacks) and verifiable robustness (mathematical guarantees), a gap that motivates the need for better training objectives. Similarly, in the domain of Natural Language Processing (NLP), the \textit{ANTONIO} framework \cite{casadio2023antonio} demonstrated how systematic benchmarking can be used to assess verification tools against formal specifications.
+
+\subsection{Differentiable Logics and Training}
+While verification acts as a gatekeeper, it does not inherently improve the model during the learning phase. Differentiable Logics (DLs) attempt to bridge this gap by translating logical constraints into differentiable loss functions. Fischer et al. introduced \textit{DL2} \cite{fischer2019dl2}, a system that allows users to query networks with logic and train them to satisfy constraints by fuzzifying boolean connectives.
+
+However, the effectiveness of DLs relies heavily on the quality of the translation from logic to arithmetic. Van Krieken et al. \cite{van2022analyzing} provided a comprehensive analysis of various t-norms (fuzzy logic operators), showing that the choice of operator significantly impacts the optimization landscape and the gradient quality during neuro-symbolic learning.

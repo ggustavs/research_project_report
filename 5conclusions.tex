@@ -1,34 +1,32 @@
 \chapter{Conclusion}\label{conclusion}
 
-You generally cover three things in the Conclusions section, and each of these usually merits a separate subsection:
+The project brought Vehicle's Python bindings closer to serving as a single artefact for both verification and differentiable training. The refreshed modules ingest the current compiler output for the benchmark set, generate backend-neutral loss programs, and execute them in TensorFlow and PyTorch for the covered scenarios, while acknowledging that long-running demonstrations and a handful of compiler edge cases remain open. This chapter distils the inferences, enumerates the concrete contributions, and outlines the research steps still required.
+
+\section{Conclusion and Discussion}
 
 \begin{enumerate}
-        \item Conclusion \& Discussion
-	\item Summary of Contributions
-	\item Limitations and Future Research
+	\item The research question is answered for the evaluated benchmarks: specifications compiled with \texttt{vehicle --json compile loss} run unchanged in both verification pipelines and TensorFlow/PyTorch training loops (Sections~\ref{analysis}--\ref{approach}). The new bindings remove the previously observed drift between the compiler and Python mirror for these cases, while two bounds-only fixtures remain deliberately disabled until the upstream compiler bug is resolved.
+	\item Backend parity is demonstrated by instantiating the shared \inlinecode{vehicle\_lang.loss} translation with TensorFlow and PyTorch builtins (Section~\ref{analysis}). Pytest evidence shows that the two backends expose matching declaration contexts across the golden specifications, indicating that framework choice no longer forces specification rewrites.
+	\item Optional-dependency isolation now matches downstream needs: verification tasks import only the lightweight CLI helpers, while training workflows opt into TensorFlow/PyTorch extras on demand. This separation addresses the installation pain reported at project start and clarifies the boundary between proof-oriented and learning-oriented tooling, albeit without repackaging the legacy modules.
+	\item Generated losses are usable beyond toy cases, but only within short-running experiments. Constraint-only and mixed-objective tests (§\ref{analysis}) show that DL2-based losses and FGSM-style samplers integrate with standard optimisers, while the longer training demonstrations remain disabled pending further performance work.
 \end{enumerate}
 
-Conclusions are not a rambling summary of the thesis: they are short, concise statements of the inferences that you have made because of your work. Ideally, they are split up: a super short wrap-up in the heading of the chapter, and then a "Discussion" that reflects the outcomes and relates them to the related work. It helps to organize these as short, numbered paragraphs, ordered from most to least important. All conclusions should be directly related to the research question stated in the beginning. Examples:
+\section{Summary of Contributions}
 
 \begin{enumerate}
-	\item The problem stated in Section 1 has been solved: as shown in Sections ? to ??, an algorithm capable of handling large-scale Zylon problems in a reasonable time has been developed.
-	\item The principal mechanism needed in the improved Zylon algorithm is the Grooty mechanism.
-	\item Etc.
+	\item Delivered \inlinecode{vehicle\_lang.loss.\_ast}, an internal AST decoder that mirrors the current compiler JSON (including \inlinecode{SearchRatTensor}) and isolates future schema evolution from the public API.
+	\item Consolidated the abstraction layer inside \inlinecode{vehicle\_lang.loss.\_abc}, unifying type variables, builtin contracts, sampler interfaces, and translation scaffolding so that each backend implements a single coherent contract.
+	\item Refurbished the TensorFlow backend and introduced a PyTorch counterpart that reuse the common Python translation; both are positioned as beta-quality implementations pending further optimisation and larger-scale trials.
+	\item Helped design the sampler interface and made FGSM-inspired samplers for both frameworks, enabling quantified searches to yield usable losses during training while allowing users to plug in custom strategies.
+	\item Extended the Pytest suite to cover AST synchronisation, backend translation, and short training integration runs, providing regression protection for the abstractions even though CI still skips the longest demonstrations.
 \end{enumerate}
 
-
-The Summary of Contributions will be much sought after and carefully read by the examiners. Here you list the contributions of new knowledge that your thesis makes. Of course, the thesis itself must substantiate any claims made here. There is often some overlap with the Conclusions, but this is okay. Concise numbered paragraphs are again best. Organize from most to least important. Examples:
+\section{Limitations and Future Research}
 
 \begin{enumerate}
-	\item Developed a much quicker algorithm for large-scale Zylon problems.
-	\item Demonstrated the first use of the Grooty mechanism for Zylon calculations.
-	\item Etc.
+	\item Address the two bounds-only quantifier fixtures that remain deliberately skipped in \inlinecode{test\_lossdl2\_load.py} because of the known compiler bug; unblocking them would close the last known gap in AST coverage.
+	\item Re-enable the long-running end-to-end demonstrations (bounded TensorFlow training and MNIST robustness) under a dedicated CI job or performance budget. Their reintroduction would provide empirical validation for larger models and datasets.
+	\item Explore richer sampler strategies (e.g. quasi-random lattices, certified adversaries, or gradient-free search) that plug into \inlinecode{ABCSampler} while preserving differentiability. Comparative studies could quantify how sampler choice affects convergence and robustness.
+	\item Generalise the backend abstractions to additional targets, such as JAX or ONNX-compatible runtimes, to further reduce the effort required to bring Vehicle constraints into diverse ML stacks.
+	\item Investigate tighter integration with property-driven training frameworks (e.g. automated curriculum generation or joint optimisation with task loss schedulers), turning the compiled Vehicle losses into first-class citizens inside experiment management tooling.
 \end{enumerate}
-
-The Future Research subsection is included so that researchers, picking up this work in the future, benefit from the ideas you generated while working on the project. Again, concise, numbered paragraphs are usually best. Sometimes this is done before the summary of contributions, to end the thesis on a positive note.
-
-\newpage \paragraph{The thesis document always closes with a Bibliography}
-
-The list of references is closely tied to the review of the state of the art given in chapter 2. Most examiners scan your list of references looking for important works in the field, so make sure they are listed and referred to. You can cite with \cite{Leunen:Scholars:1992, Zuber-Skerritt:ThesisWriting:1986}, \citep{Zuber-Skerritt:ThesisWriting:1986}, or \citet{Zuber-Skerritt:ThesisWriting:1986}
-
-All references given must be referred to in the main body of the thesis. Organize the list of references either alphabetically by author surname (preferred), or by order of citation in the thesis. 
